@@ -28,9 +28,9 @@ When a free tier rate-limits, the run does not stop; it moves down the chain and
 keeps going. That is the whole design.
 
 <p align="center">
-  <img src="docs/run-trace.jpg" alt="A run in progress: the plan, the tool call with its arguments and duration, and the answer" width="900">
+  <img src="docs/demo.gif" alt="One run end to end: a research question goes in, the agent plans, searches, writes a diagram to the workspace and opens it" width="900">
 </p>
-<p align="center"><sub>Every run shows its working: what it planned, which tool it called with which arguments, how long that took, and what came back.</sub></p>
+<p align="center"><sub>One run, start to finish: a question goes in, the plan appears, each tool call runs in the open, and the file it produced is opened from disk.</sub></p>
 
 ## Why it exists
 
@@ -39,6 +39,11 @@ way round: the run trace is the primary content, and the answer is what is left
 once you can see how it was reached. Every tool call is on screen with its
 arguments, its duration and its raw result, and every file the agent writes is
 re-opened and described back from disk rather than from the code that wrote it.
+
+<p align="center">
+  <img src="docs/run-trace.jpg" alt="A run in progress: the plan, the tool call with its arguments and duration, and the answer" width="900">
+</p>
+<p align="center"><sub>Every run shows its working: what it planned, which tool it called with which arguments, how long that took, and what came back.</sub></p>
 
 It also has to be free to run all day. A single free tier is not an everyday
 assistant — it is an assistant that stops working at two in the afternoon. So
