@@ -1,0 +1,47 @@
+name: Model report
+description: A model that does or doesn't work well in a role.
+labels: ["models"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Capability data is inferred for some providers, and small models often
+        narrate tool calls instead of making them. Reports like this are how the
+        defaults get better.
+
+  - type: input
+    id: model
+    attributes:
+      label: Model
+      placeholder: groq::openai/gpt-oss-120b
+    validations:
+      required: true
+
+  - type: dropdown
+    id: role
+    attributes:
+      label: Role
+      options: [base, coder, vision, image]
+    validations:
+      required: true
+
+  - type: dropdown
+    id: verdict
+    attributes:
+      label: Verdict
+      options:
+        - Works well — consider it for the defaults
+        - Works, with caveats
+        - Reports a capability it does not have
+        - Fails to call tools (narrates them instead)
+        - Fails some other way
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: A prompt and what the trace showed. "It felt worse" is hard to act on; a trace is not.
+    validations:
+      required: true

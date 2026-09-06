@@ -1,0 +1,39 @@
+name: Proposal
+description: A concrete change, with the problem it solves.
+labels: ["proposal"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you were trying to do, and where the software got in the way. Start here, not with the solution.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you propose
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you considered instead
+      description: Including doing nothing — why isn't that good enough?
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Tools
+        - Model providers and routing
+        - The web UI
+        - Sandbox and isolation
+        - Retrieval and memory
+        - Documentation
+        - Something else
+    validations:
+      required: true

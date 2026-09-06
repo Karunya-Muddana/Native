@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # No model provider, no Ollama and no Docker are available here, so this
+      # cannot run a turn. What it can prove is that the tree imports, that the
+      # tool registry builds, and that every tool is documented in the prompt —
+      # which is the class of breakage most likely to slip through review.
+      - name: Import the tool registry
+        run: |
+          python -c "
+          from app.tools.registery import tools
+          import app.config.prompts as prompts
+          missing = [name for name in tools if name not in prompts.SYSTEM_PROMPT]
+          assert not missing, f'tools missing from the system prompt: {missing}'
+          print(f'{len(tools)} tools, all documented')
+          "
+
+      - name: Import the model layer
+        run: |
+          python -c "
+          from app.config import models, providers
+          from app.models import router
+          assert set(models.ROLES) == set(models.DEFAULT_CHAINS), 'a role has no default chain'
+          for role, chain in models.DEFAULT_CHAINS.items():
+              assert chain, f'{role} chain is empty'
+              for entry in chain:
+                  provider, name = providers.split_id(entry)
+                  assert provider in providers.META, f'unknown provider {provider} in {role}'
+          print('roles and default chains are coherent')
+          "
+
+      - name: Byte-compile everything
+        run: python -m compileall -q app api.py cli.py main.py
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # The UI is one file with no build step, so the useful check is simply
+      # that its script parses.
+      - name: Parse the UI script
+        run: |
+          node -e "
+          const fs = require('fs');
+          const s = fs.readFileSync('frontend/index.html', 'utf8');
+          const code = s.slice(s.lastIndexOf('<script>') + 8, s.lastIndexOf('</script>'));
+          new Function(code);
+          console.log('frontend/index.html parses');
+          "

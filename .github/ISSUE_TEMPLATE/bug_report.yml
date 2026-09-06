@@ -1,0 +1,71 @@
+name: Bug report
+description: Something behaves differently from what it claims.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The run trace is the most useful thing you can give us. Open it, expand
+        the failing step, and paste what the tool actually returned.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you expected, and what you got instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce
+      description: The prompt, the files involved, and the steps.
+      placeholder: |
+        1. Ask: "..."
+        2. Attach: measurements.xlsx
+        3. The trace shows ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: trace
+    attributes:
+      label: Run trace
+      description: The failing step — its arguments and its result. Redact anything confidential.
+      render: text
+
+  - type: input
+    id: model
+    attributes:
+      label: Which model served the role
+      description: From the Models panel — the link marked "in use".
+      placeholder: groq::openai/gpt-oss-120b
+    validations:
+      required: true
+
+  - type: dropdown
+    id: role
+    attributes:
+      label: Which role
+      options: [base, coder, vision, image, "not model-related"]
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: OS and Python
+      placeholder: Windows 11, Python 3.10.11
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: Docker is running, if the failing tool is python_runner or run_ocr
+        - label: I checked [Limitations](../../blob/main/docs/limitations.md) — it may be known
+        - label: There are no API keys or confidential data in what I pasted
+          required: true

@@ -1,0 +1,21 @@
+Native by K
+Copyright 2026 Karunya Muddana
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+The name "Native", the "Native by K" lockup and the N/A monogram are NOT
+covered by that licence. The artwork under Logos/, docs/banner.svg and
+docs/mark.svg is excluded from the grant and all rights in it are reserved.
+See TRADEMARKS.md.
+
+This product bundles or depends on third-party work:
+
+  Phosphor Icons (MIT) — https://phosphoricons.com
+    Icon paths are embedded in frontend/index.html.
+
+  Inter-family typefaces served from Google Fonts at runtime:
+    Fraunces, Instrument Sans, JetBrains Mono — all SIL Open Font License 1.1.
+
+  marked (MIT) and highlight.js (BSD-3-Clause), loaded from a CDN at runtime.
+
+Python dependencies keep their own licenses; see requirements.txt.

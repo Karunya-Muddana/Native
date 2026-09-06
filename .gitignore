@@ -1,0 +1,65 @@
+# ── secrets ────────────────────────────────────────────────────────────────
+# Provider keys live here. .env.example documents the names without the values.
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+credentials.json
+service-account*.json
+
+# ── python ─────────────────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# ── runtime state ──────────────────────────────────────────────────────────
+# Conversations, the session list, and the chosen model chains. All of it is
+# this machine's, not the project's — a clone should start empty.
+app/data/
+chroma/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# ── the workspace ──────────────────────────────────────────────────────────
+# Whatever the user dropped in and whatever the agent produced. The directories
+# themselves are kept, with a .gitkeep, because the app expects them to exist.
+sandbox_input/*
+sandbox_output/*
+knowledge_base/*
+!sandbox_input/.gitkeep
+!sandbox_output/.gitkeep
+!knowledge_base/.gitkeep
+
+# ── tooling ────────────────────────────────────────────────────────────────
+.claude/
+.cursor/
+.aider*
+.idea/
+.vscode/
+*.code-workspace
+
+# ── working notes ──────────────────────────────────────────────────────────
+# Design references collected while building. Not part of the product.
+inspirations/
+
+# ── os ─────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+*~
+*.swp
+*.log
