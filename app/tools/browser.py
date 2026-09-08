@@ -15,6 +15,8 @@ from urllib.parse import parse_qs, quote_plus, unquote, urljoin, urlparse
 import requests
 from langchain_core.tools import tool
 
+from app.tools import liveweb
+
 REQUEST_TIMEOUT = 30
 MAX_TEXT_CHARS = 20_000  # keep one page from swallowing the context window
 MAX_LINKS = 60
@@ -47,6 +49,14 @@ def web_search(query: str, num_results: int = 5) -> str:
         return "Error: no query given."
 
     num_results = max(1, min(int(num_results or 5), MAX_RESULTS))
+
+    # The live browser first: it reaches Google, and it sees the results a
+    # person would. None means Steel is not running, so fall through to the
+    # HTTP endpoint below — losing the browser costs rendering, not the web.
+    rendered = liveweb.live_search(query, num_results)
+    if rendered is not None:
+        return rendered
+
     try:
         results = _search(query)
     except requests.Timeout:
@@ -118,6 +128,10 @@ def browse_web(url: str, action: str = "read") -> str:
     url = normalize_url(url)
     if url.startswith("Error:"):
         return url
+
+    rendered = liveweb.live_fetch(url, action)
+    if rendered is not None:
+        return rendered
 
     try:
         response = requests.get(

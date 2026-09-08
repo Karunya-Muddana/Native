@@ -14,10 +14,9 @@ locally" is not evidence.
 
 ```bash
 git clone <your fork> && cd Native
-python -m venv .venv && .venv/Scripts/activate   # source .venv/bin/activate elsewhere
-pip install -r requirements.txt
-cp .env.example .env                              # add whichever keys you have
-uvicorn api:app --host 127.0.0.1 --port 8000 --reload
+python install.py --skip-steel --skip-docker      # the Python side only
+.venv/Scripts/activate                            # source .venv/bin/activate elsewhere
+native start --reload                             # restarts on code changes
 ```
 
 You need **no keys at all** to work on most of this. With none set, every role

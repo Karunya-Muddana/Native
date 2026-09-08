@@ -1,4 +1,4 @@
-from app.tools import io, math, sandbox, sandbox_files, rag, ocr, pdf_info, excel_info, browser, desktop, workspace, authoring, imagegen
+from app.tools import io, math, sandbox, sandbox_files, rag, ocr, pdf_info, excel_info, browser, desktop, workspace, authoring, imagegen, imagefind, notes, livebrowser
 from app.tools.sub_agents import vision
 from app.tools import delegate_to_subagent as sub_agents
 
@@ -26,4 +26,9 @@ tools = {
     authoring.create_spreadsheet.name: authoring.create_spreadsheet,
     authoring.create_presentation.name: authoring.create_presentation,
     imagegen.generate_image.name: imagegen.generate_image,
+    imagefind.find_image.name: imagefind.find_image,
+    notes.note_source.name: notes.note_source,
+    notes.review_notes.name: notes.review_notes,
+    livebrowser.browser_do.name: livebrowser.browser_do,
+    livebrowser.browser_page.name: livebrowser.browser_page,
 }

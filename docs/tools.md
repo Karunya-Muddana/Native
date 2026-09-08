@@ -2,9 +2,7 @@
 
 The full reference. The README covers what they are for; this is what they take.
 
-# Tools
-
-Twenty-two of them, on **LangGraph**. Your documents and your embeddings never
+Twenty-seven of them, on **LangGraph**. Your documents and your embeddings never
 leave the machine. The model does, unless you point every chain at Ollama — in
 which case nothing does.
 
@@ -43,13 +41,19 @@ which case nothing does.
 
 | Tool | Purpose |
 |---|---|
-| `web_search` | Searches the public internet and returns ranked title / URL. Finds the page; `browse_web` reads it. Backed by DuckDuckGo's HTML-only endpoint, whose results are parsed off the page and unwrapped from their `/l/?uddg=` redirects |
-| `browse_web` | Fetches a public web page over plain HTTP and returns it as text, raw HTML, or a link list. One tool with an `action`, not three, because all three take the same argument and the model only has to pick the output shape. Stateless and read-only: no cookies, no login, no JavaScript |
+| `web_search` | Searches the public internet and returns ranked title / URL. Finds the page; `browse_web` reads it. Runs in the live browser — Google first, DuckDuckGo when Google shows a consent screen or a robot check. Falls back to DuckDuckGo's HTML-only endpoint over plain HTTP when Steel is not running |
+| `browse_web` | Renders a public web page in the live browser and returns it as text, raw HTML, or a link list. One tool with an `action`, not three, because all three take the same argument and the model only has to pick the output shape. JavaScript runs, so client-side pages come back whole; it reads in a scratch tab, so it never disturbs a form `browser_do` is part-way through. Falls back to a plain HTTP fetch when Steel is not running, which costs rendering rather than the internet |
+| `note_source` | Appends one source to a research notebook in `/sandbox/output/`, numbered `[S1]`, `[S2]` … with its URL. Answers with the running state of the whole notebook, not just "saved", so the model's sense of its own coverage is refreshed from the file at every step. Refuses a duplicate URL and a summary too thin to write from |
+| `review_notes` | Reads a research notebook back from disk. The point of writing notes to a file is that they outlive the context window: by the twentieth source the first fifteen have been trimmed out of the conversation, and this is how they come back |
+| `browser_do` | Operates a real Chrome that stays open between calls, holding its cookies and its logins — go to a page, click, type, select, submit. One tool with an `action` rather than nine, because Steel's API is large and the model should not have to shop in it. Elements are addressed by the number the last result gave them, never by a selector the model invented, and every call answers with the page it produced |
+| `browser_page` | Reads the page the live browser is showing — text, links, raw HTML, or a screenshot saved to `/sandbox/output/` for `run_through_vision_model` to look at. It reads what is on screen; it does not navigate |
 | `open_on_screen` | Hands a URL to the operator's real browser, or a sandbox file to whatever application the machine opens that file type with — images, PDFs, spreadsheets, documents. The one tool that sends content *out* to the desktop instead of pulling it in; it displays, it does not read |
 | `clear_workspace` | Empties the workspace: sandbox files, saved conversations, and the vector indexes, by `scope`. Two-beat by design — without `confirm` it deletes nothing and reports what would go, so the count reaches the user before the deletion does. Knowledge base documents are never deleted, only their index |
 | `write_document` | Writes a .docx from a JSON list of blocks — headings, paragraphs, bullets, tables, embedded images, page breaks. The step the flagship workflow was missing: OCR → data → rules → calculation had no deliverable at the end of it, only a chat message |
 | `create_spreadsheet` | Writes a styled .xlsx from `{name, header, rows}` sheets — frozen header, auto-filter, auto-sized columns, and numeric coercion so `"10.9"` lands as a number that sorts and sums |
-| `create_presentation` | Writes a 16:9 .pptx — title slide, then bullets / table / chart slides with speaker notes. Layout is fixed by the tool, not chosen by the model, because a model asked to place boxes produces overlapping text |
+| `create_presentation` | Writes a designed 16:9 .pptx. The model supplies content and the tool composes it: section dividers, bullets, banded tables, headline-figure cards, pull quotes, image-plus-text splits and full-bleed images, in one of five palettes. Layout is fixed by the tool, not chosen by the model, because a model asked to place boxes produces overlapping text — and painting the palette itself is what keeps a deck off python-pptx's stock white master |
+| `generate_image` | Draws an image and saves a PNG. Reached through the `image` model role. Every prompt is composed against a house style — a shared quality floor plus one of five per-medium voices (`photo`, `explainer`, `illustration`, `icon`, `render`) — because a photograph and a labelled diagram want opposite directions |
+| `find_image` | Searches the web for a real photograph and downloads it to the workspace. `source='web'` scrapes Bing's result metadata for breadth; `source='open'` queries Wikimedia Commons for pictures licensed for reuse and reports the licence. Candidates are downloaded in order and decoded before being kept, so hotlink blocks, login redirects and 600 px previews are rejected rather than saved |
 
 **Knowledge base**
 

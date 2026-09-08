@@ -18,4 +18,19 @@ This product bundles or depends on third-party work:
 
   marked (MIT) and highlight.js (BSD-3-Clause), loaded from a CDN at runtime.
 
+  Steel Browser (Apache License 2.0) — https://github.com/steel-dev/steel-browser
+    The live browser behind browser_do, browser_page, and the rendered paths of
+    web_search and browse_web. It is NOT bundled or redistributed here: it runs
+    as a separate service the operator installs and starts themselves, and this
+    project talks to it over its HTTP API and the CDP websocket it hands back.
+    No Steel source is vendored into this repository.
+    "Steel" and "Steel Browser" are the marks of their owners. This project is
+    an independent user of that software and is not affiliated with, endorsed
+    by, or sponsored by Steel.
+
+  Playwright for Python (Apache License 2.0) — https://playwright.dev/python
+    Drives the Steel session over CDP. Declared in requirements.txt; installed
+    from PyPI, not vendored. Playwright's own browser download
+    (`playwright install`) is deliberately not used — the browser is Steel's.
+
 Python dependencies keep their own licenses; see requirements.txt.

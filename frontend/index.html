@@ -378,6 +378,22 @@ button:disabled { cursor:not-allowed; }
 .ws-body { display:grid; grid-template-rows:0fr; transition:grid-template-rows var(--t) var(--ease); }
 .ws.open .ws-body { grid-template-rows:1fr; }
 .ws-body > .in { overflow:hidden; }
+/* clear-history — two beats in one button: the second click is the confirm,
+   so the destructive act needs a deliberate second move but no modal. */
+.wipe {
+  width:100%; display:flex; align-items:center; gap:8px;
+  padding:10px 14px; color:var(--ink-3); font-size:12.5px; font-weight:500;
+  border-top:1px solid var(--border);
+  transition:color var(--t-fast), background var(--t-fast);
+}
+.wipe:hover { color:var(--fail); background:var(--fail-wash); }
+.wipe .ico { color:var(--ink-4); transition:color var(--t-fast); }
+.wipe:hover .ico { color:var(--fail); }
+.wipe[data-armed="1"] { color:var(--fail); background:var(--fail-wash); }
+.wipe[data-armed="1"] .ico { color:var(--fail); }
+.wipe .esc { margin-left:auto; font-family:var(--f-mono); font-size:10px; color:var(--ink-4); }
+.wipe[disabled] { opacity:.55; }
+
 .ws-list { max-height:34vh; overflow-y:auto; padding:0 6px 8px; }
 .ws-sec {
   display:flex; align-items:center; gap:6px;
@@ -1221,6 +1237,33 @@ body.just-done .mark-leaf { animation:leafDone .9s var(--ease-out) 1; }
 }
 .comp-l, .comp-r { display:flex; align-items:center; gap:2px; flex:none; padding-bottom:3px; }
 
+/* Run mode. Collapsed to an icon on the default, and only then — a non-default
+   mode changes what the next send does, so it is spelled out rather than left
+   to a highlight the eye can skip. */
+.mode {
+  height:30px; padding:0 8px; border-radius:var(--r-sm);
+  display:flex; align-items:center; gap:6px; color:var(--ink-3);
+  transition:background var(--t-fast), color var(--t-fast), transform var(--t-fast) var(--ease);
+}
+.mode:hover { background:var(--surface-2); color:var(--ink); }
+.mode:active { transform:scale(.94); }
+.mode[aria-expanded="true"] { background:var(--surface-3); color:var(--ink); }
+.mode span {
+  font-family:var(--f-mono); font-size:10.5px; letter-spacing:.06em;
+  text-transform:uppercase; white-space:nowrap;
+}
+.mode span:empty { display:none; }
+.mode.on { background:var(--acc-wash); color:var(--acc); }
+.mode.on:hover { background:var(--acc-wash); color:var(--acc); }
+
+/* A menu row that has to explain itself, not just name itself. */
+.menu .mi.tall { align-items:flex-start; padding-top:8px; padding-bottom:8px; }
+.menu .mi .mtext { display:flex; flex-direction:column; gap:2px; min-width:0; }
+.menu .mi .mnote {
+  font-size:11px; line-height:1.45; color:var(--ink-4); white-space:normal;
+  max-width:250px;
+}
+
 .send {
   width:30px; height:30px; border-radius:50%; flex:none;
   display:grid; place-items:center;
@@ -1453,6 +1496,11 @@ body.just-done .mark-leaf { animation:leafDone .9s var(--ease-out) 1; }
         </button>
         <div class="ws-body"><div class="in"><div class="ws-list scroll" id="wsList"></div></div></div>
       </section>
+      <button class="wipe" id="btnWipe" data-tip="Deletes every conversation and both search indexes">
+        <i class="ig" data-ico="trash" data-cls="ico ico-sm"></i>
+        <span id="wipeLabel">Clear all history</span>
+        <span class="esc" id="wipeEsc" hidden>Esc</span>
+      </button>
     </div>
   </aside>
 
@@ -1520,6 +1568,15 @@ body.just-done .mark-leaf { animation:leafDone .9s var(--ease-out) 1; }
             <div class="comp-l">
               <button class="ibtn" type="button" id="btnAttach" data-tip="Add files" aria-label="Add files" aria-expanded="false">
                 <i class="ig" data-ico="add" data-cls="ico ico-lg"></i>
+              </button>
+              <!-- The mode is a per-turn choice, so it lives on the composer
+                   next to the other things you decide before pressing send —
+                   not in settings, where it would be invisible at the moment it
+                   matters. It names itself when it is not the default. -->
+              <button class="mode" type="button" id="btnMode" data-tip="Run mode"
+                      aria-label="Run mode" aria-expanded="false">
+                <i class="ig" data-ico="route" data-cls="ico ico-sm"></i>
+                <span id="modeLabel"></span>
               </button>
             </div>
             <textarea id="input" rows="1" placeholder="Ask about a document, a measurement, or a standard…" autocomplete="off" spellcheck="false"></textarea>
@@ -1839,9 +1896,15 @@ function openMenu(anchor, items, opts = {}) {
   const m = el("div", "menu");
   for (const it of items) {
     if (it.sep) { m.appendChild(el("div", "msep")); continue; }
-    const b = el("button", "mi" + (it.danger ? " danger" : ""));
+    const b = el("button", "mi" + (it.danger ? " danger" : "") + (it.note ? " tall" : ""));
     b.type = "button";
-    b.innerHTML = `${svg(it.icon, "ico ico-sm")}<span>${esc(it.label)}</span>${it.kb ? `<span class="kb">${esc(it.kb)}</span>` : ""}`;
+    /* A row may carry a second line explaining what choosing it will do, and
+       may mark itself as the current choice — both needed once the menu
+       started holding settings rather than only actions. */
+    const label = it.note
+      ? `<span class="mtext"><span>${esc(it.label)}</span><span class="mnote">${esc(it.note)}</span></span>`
+      : `<span>${esc(it.label)}</span>`;
+    b.innerHTML = `${svg(it.active ? "check" : it.icon, "ico ico-sm")}${label}${it.kb ? `<span class="kb">${esc(it.kb)}</span>` : ""}`;
     b.addEventListener("click", () => { closeMenu(); it.run(); });
     m.appendChild(b);
   }
@@ -1909,6 +1972,11 @@ const state = {
   attachments:[], quote:null, lastSend:null,
   picker:null, pendingSuggestion:null,
   pinned:new Set(JSON.parse(localStorage.getItem("wb-pins") || "[]")),
+  /* Remembered across reloads, because someone doing a day of research should
+     not have to re-select it every time. The server is asked what modes exist
+     rather than the list being duplicated here. */
+  mode:localStorage.getItem("wb-mode") || "standard",
+  modes:[{ id:"standard", label:"Standard", note:"Answers directly, using tools as needed." }],
 };
 const savePins = () => localStorage.setItem("wb-pins", JSON.stringify([...state.pinned]));
 
@@ -1920,6 +1988,10 @@ const api = {
   sessions: ()      => fetch("/sessions").then(r => r.json()).then(d => d.sessions),
   messages: id      => fetch(`/sessions/${id}/messages`).then(r => r.json()).then(d => d.messages),
   del:      id      => fetch(`/sessions/${id}`, { method:"DELETE" }),
+  wipe:     ()      => fetch("/history", { method:"DELETE" }).then(r => {
+                         if (!r.ok) throw new Error("clear failed");
+                         return r.json();
+                       }),
   rename:   (id, t) => fetch(`/sessions/${id}`, {
                          method:"PATCH", headers:{ "Content-Type":"application/json" },
                          body:JSON.stringify({ title:t }),
@@ -2314,6 +2386,51 @@ $("#btnAttach").addEventListener("click", () => {
   }
   openMenu($("#btnAttach"), items);
 });
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   run mode — what the next send does, chosen where it is about to happen
+   ═══════════════════════════════════════════════════════════════════════════ */
+const PLACEHOLDERS = {
+  standard: "Ask about a document, a measurement, or a standard…",
+  research: "Ask a research question — many sources, notes taken on each…",
+};
+
+function renderMode() {
+  const current = state.modes.find(m => m.id === state.mode) || state.modes[0];
+  const isDefault = current.id === "standard";
+  const btn = $("#btnMode");
+  btn.classList.toggle("on", !isDefault);
+  /* The label appears only off-default: on Standard the control should not
+     compete with the prompt it sits beside. */
+  $("#modeLabel").textContent = isDefault ? "" : current.label;
+  btn.dataset.tip = `Run mode — ${current.label}`;
+  btn.setAttribute("aria-label", `Run mode: ${current.label}`);
+  input.placeholder = PLACEHOLDERS[current.id] || PLACEHOLDERS.standard;
+}
+
+function setMode(id) {
+  state.mode = id;
+  localStorage.setItem("wb-mode", id);
+  renderMode();
+}
+
+$("#btnMode").addEventListener("click", () => {
+  openMenu($("#btnMode"), state.modes.map(m => ({
+    icon:m.id === "research" ? "library" : "route",
+    label:m.label,
+    note:m.note,
+    active:m.id === state.mode,
+    run:() => setMode(m.id),
+  })));
+});
+
+/* The server owns the list; a mode the UI offers that the runtime does not
+   implement would silently fall back to standard and look like a bug. */
+fetch("/modes").then(r => r.json()).then(d => {
+  if (Array.isArray(d.modes) && d.modes.length) state.modes = d.modes;
+  if (!state.modes.some(m => m.id === state.mode)) state.mode = d.default || "standard";
+  renderMode();
+}).catch(() => renderMode());
 
 $("#btnTools").addEventListener("click", () => {
   openMenu($("#btnTools"), [
@@ -3437,7 +3554,7 @@ async function send(text, opts = {}) {
     res = await fetch("/chat/stream", {
       method:"POST",
       headers:{ "Content-Type":"application/json" },
-      body:JSON.stringify({ message:prompt, session_id:state.sessionId }),
+      body:JSON.stringify({ message:prompt, session_id:state.sessionId, mode:state.mode }),
       signal:state.abort.signal,
     });
     if (!res.ok) throw new Error(`the server returned ${res.status}`);
@@ -4012,6 +4129,49 @@ $("#comp").addEventListener("submit", e => {
 });
 $("#btnNew").addEventListener("click", newAnalysis);
 
+/* ── clear all history ─────────────────────────────────────────────────────
+   One click arms, the second deletes; anything else (Esc, a click elsewhere,
+   eight seconds of nothing) disarms. The wording changes with the state, so
+   the button always says what the next click actually does. */
+const btnWipe = $("#btnWipe"), wipeLabel = $("#wipeLabel"), wipeEsc = $("#wipeEsc");
+let wipeTimer = null;
+
+function disarmWipe() {
+  clearTimeout(wipeTimer); wipeTimer = null;
+  btnWipe.removeAttribute("data-armed");
+  wipeLabel.textContent = "Clear all history";
+  wipeEsc.hidden = true;
+}
+
+async function runWipe() {
+  disarmWipe();
+  btnWipe.disabled = true;
+  wipeLabel.textContent = "Clearing…";
+  let out;
+  try { out = await api.wipe(); }
+  catch { toast("Couldn't clear history", "error"); return; }
+  finally { btnWipe.disabled = false; wipeLabel.textContent = "Clear all history"; }
+
+  state.sessions = [];
+  state.pinned.clear(); savePins();
+  renderConvs();
+  newAnalysis();
+  const bits = [`${out.sessions} conversation${out.sessions === 1 ? "" : "s"}`];
+  if (out.memories) bits.push(`${out.memories} remembered turn${out.memories === 1 ? "" : "s"}`);
+  if (out.chunks)   bits.push(`${out.chunks} indexed chunk${out.chunks === 1 ? "" : "s"}`);
+  toast(`History cleared — ${bits.join(", ")} deleted`);
+}
+
+btnWipe.addEventListener("click", e => {
+  e.stopPropagation();
+  if (btnWipe.dataset.armed) { runWipe(); return; }
+  btnWipe.dataset.armed = "1";
+  wipeLabel.textContent = "Delete everything? Click again";
+  wipeEsc.hidden = false;
+  wipeTimer = setTimeout(disarmWipe, 8000);
+});
+document.addEventListener("click", () => { if (btnWipe.dataset.armed) disarmWipe(); });
+
 $("#kbNew").textContent = MOD + "N";
 $("#btnSearch").dataset.kb = MOD + "K";
 
@@ -4030,6 +4190,7 @@ document.addEventListener("keydown", e => {
   else if (e.key === "Escape") {
     if (palOpen) closePalette();
     else if (openMenuEl) closeMenu();
+    else if (btnWipe.dataset.armed) disarmWipe();
     else if (selpop.classList.contains("show")) hideSel();
     else closeRail();
   }

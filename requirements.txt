@@ -41,6 +41,11 @@ python-pptx==1.0.2
 # retrieval and memory
 chromadb==1.5.9
 
+# the live browser — drives the Chrome that Steel launches, over CDP.
+# `playwright install` is deliberately not needed: this attaches to Steel's
+# browser rather than downloading one of its own.
+playwright==1.56.0
+
 # the sandbox, and reaching the network
 docker==7.2.0
 httpx==0.28.1

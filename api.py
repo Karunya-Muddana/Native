@@ -14,6 +14,7 @@ from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from pydantic import BaseModel
 
 from app.config import models as model_config
+from app.runtime import runtime as runtime_modes
 from app.runtime.runtime import AgentRuntime
 
 ROOT = Path(__file__).parent
@@ -34,6 +35,9 @@ runtime = AgentRuntime()
 class ChatRequest(BaseModel):
     message: str
     session_id: str | None = None
+    # "standard" or "research". Per-turn, not per-session: the mode the user
+    # had selected when they pressed send is the mode that turn runs in.
+    mode: str | None = None
 
 
 class SessionRequest(BaseModel):
@@ -73,10 +77,24 @@ def delete_session(session_id: str):
     return {"deleted": session_id}
 
 
+@app.delete("/history")
+def clear_history():
+    """Erase every stored conversation and both vector indexes.
+
+    Separate from DELETE /sessions/{id}, which removes one analysis: this is the
+    whole record — the checkpoint database, the session list, the recalled-memory
+    collection in Chroma and the knowledge base index. Sandbox files stay, and so
+    do the knowledge base documents themselves; only their index goes.
+    """
+    from app.tools import workspace as workspace_tools
+
+    return workspace_tools.clear_history()
+
+
 @app.post("/chat")
 def chat(body: ChatRequest):
     """Blocking: returns the final answer plus every step of the turn."""
-    return runtime.run(body.message, body.session_id)
+    return runtime.run(body.message, body.session_id, body.mode)
 
 
 @app.post("/chat/stream")
@@ -90,7 +108,7 @@ def chat_stream(body: ChatRequest):
         # into a final event instead, so the turn ends with a stated reason and
         # the steps already streamed stay on screen.
         try:
-            for item in runtime.stream(body.message, body.session_id):
+            for item in runtime.stream(body.message, body.session_id, body.mode):
                 yield f"data: {json.dumps(item)}\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'event': 'error', 'error': f'{type(e).__name__}: {e}'})}\n\n"
@@ -234,6 +252,27 @@ def pull_model(body: ModelName):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@app.get("/modes")
+def modes():
+    """The run modes the UI can offer, described by the server that runs them."""
+    return {
+        "default": runtime_modes.DEFAULT_MODE,
+        "modes": [
+            {
+                "id": "standard",
+                "label": "Standard",
+                "note": "Answers directly, using tools as needed.",
+            },
+            {
+                "id": "research",
+                "label": "Research",
+                "note": "Reads many sources one at a time, takes notes on each, "
+                        "and answers from the notebook with citations. Slow.",
+            },
+        ],
+    }
 
 
 @app.get("/health")

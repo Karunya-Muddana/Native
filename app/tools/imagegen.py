@@ -26,6 +26,71 @@ from app.tools.readback import describe
 
 MAX_PROMPT = 2000
 
+# Left to itself an image model averages its training set and hands back
+# something that reads as generic — muddy palette, no focal point, a stock-photo
+# watermark, garbled lettering. A house style fixes that, but it cannot be one
+# paragraph: a photograph wants depth of field and a real light source, and an
+# explainer wants exactly the opposite — flat, evenly lit, nothing in the frame
+# that is not carrying information. So the floor below is shared and the rest is
+# chosen per call.
+UNIVERSAL = (
+    "Render this to a professional standard: deliberate composition with a clear "
+    "focal point and balanced negative space, a restrained harmonious palette "
+    "rather than oversaturated colour, accurate geometry and proportions, and "
+    "detail that holds up at full size without looking noisy or over-processed. "
+    "No watermarks, signatures, stock-photo logos, decorative borders, collage "
+    "panels or UI chrome. Any lettering must be spelled exactly as given in the "
+    "description and set in a clean legible typeface; do not add captions, "
+    "labels or signage that were not asked for."
+)
+
+STYLES = {
+    # Meant to pass as a real photograph, so the directions are camera
+    # directions — the giveaway of a generated photo is plastic skin, uniform
+    # focus and light coming from nowhere.
+    "photo": (
+        "Photorealistic. Shot on a full-frame camera with a fast prime lens: "
+        "natural depth of field with a genuinely sharp plane of focus and soft "
+        "falloff behind it, believable directional lighting with consistent "
+        "shadows and specular highlights, true-to-life skin and material texture, "
+        "subtle lens character and film-like grain. No plastic smoothing, no HDR "
+        "glow, no illustration or 3D-render look."
+    ),
+    # An explainer earns its place by being read, not admired — so legibility and
+    # honest structure outrank prettiness.
+    "explainer": (
+        "A clear explanatory diagram, not decorative art. Flat even lighting and "
+        "a plain uncluttered background. Show the structure honestly: distinct "
+        "labelled parts, sensible relative scale, arrows or connectors only where "
+        "they carry meaning, and generous spacing so nothing crowds. A small "
+        "palette used consistently, with colour distinguishing parts rather than "
+        "decorating them. Every label short, correctly spelled and large enough "
+        "to read at a glance. No gradients, glow, drop shadows, 3D perspective "
+        "tricks or background scenery competing with the content."
+    ),
+    "illustration": (
+        "A polished illustration with a coherent point of view: confident "
+        "intentional linework, deliberate shape language, colour used in a "
+        "limited harmonious set, and stylisation applied consistently across "
+        "every element. Editorial quality rather than clip art, and not "
+        "photorealistic."
+    ),
+    "icon": (
+        "A flat vector-style icon: simple geometric silhouette, uniform stroke "
+        "weight, generous padding inside the frame, one or two flat colours, and "
+        "a plain solid or transparent background. Legible when shrunk to a small "
+        "size. No gradients, shadows, textures, outlines-within-outlines or text."
+    ),
+    "render": (
+        "A clean 3D product render: studio lighting with soft boxes and a gentle "
+        "gradient backdrop, accurate materials with believable reflection and "
+        "roughness, crisp edges, and a contact shadow grounding the subject. "
+        "Sharp throughout rather than photographic depth of field."
+    ),
+}
+
+DEFAULT_STYLE = "illustration"
+
 ASPECTS = {
     "square": "1:1",
     "landscape": "16:9",
@@ -36,15 +101,32 @@ ASPECTS = {
 
 
 @tool
-def generate_image(prompt: str, filename: str, aspect: str = "square") -> str:
+def generate_image(
+    prompt: str,
+    filename: str,
+    aspect: str = "square",
+    style: str = DEFAULT_STYLE,
+) -> str:
     """
     Draw an image from a description and save it to /sandbox/output/.
 
     Use this when the user asks for a picture, sketch, diagram, illustration,
     icon or figure that does not already exist. prompt should describe what to
-    draw in detail — subject, style, composition, and any text that must appear
-    in it. filename is what to save it as. aspect is 'square', 'landscape' or
+    draw in detail — subject, composition, and any text that must appear in it.
+    filename is what to save it as. aspect is 'square', 'landscape' or
     'portrait'.
+
+    style picks the house style applied on top of your prompt — set it to what
+    the user actually asked for:
+      - 'photo'        a photograph: real camera lighting and depth of field
+      - 'explainer'    a labelled diagram meant to be read: flat, plain, legible
+      - 'illustration' editorial artwork with a consistent visual style (default)
+      - 'icon'         a small flat vector symbol on a plain background
+      - 'render'       a studio 3D product render
+
+    Craft directions — composition, palette, "no watermarks or stray lettering"
+    — are added for you on every call, so spend the prompt on the subject and
+    the specifics rather than on quality boilerplate.
 
     This DRAWS a new image. To look at an image that already exists, use
     run_through_vision_model. To plot data, use python_runner — a chart is
@@ -61,6 +143,10 @@ def generate_image(prompt: str, filename: str, aspect: str = "square") -> str:
         return f"Error: the prompt is longer than {MAX_PROMPT} characters."
 
     ratio = ASPECTS.get(str(aspect or "square").strip().lower(), "1:1")
+    # An unrecognised style falls back to the universal floor alone rather than
+    # to a guess — a diagram forced through the illustration voice is worse than
+    # one with no house style at all.
+    house = STYLES.get(str(style or "").strip().lower(), "")
 
     chain = model_config.candidates("image")
     if not chain:
@@ -72,7 +158,7 @@ def generate_image(prompt: str, filename: str, aspect: str = "square") -> str:
     failures = []
     for model_id in chain:
         try:
-            data = _draw(model_id, prompt, ratio)
+            data = _draw(model_id, prompt, ratio, house)
         except Exception as e:
             failures.append(f"{model_id}: {type(e).__name__}: {str(e)[:140]}")
             continue
@@ -95,8 +181,11 @@ def generate_image(prompt: str, filename: str, aspect: str = "square") -> str:
     return "Error: every image model failed.\n" + "\n".join(f"  - {f}" for f in failures)
 
 
-def _draw(model_id: str, prompt: str, ratio: str) -> bytes | None:
+def _draw(model_id: str, prompt: str, ratio: str, house: str = "") -> bytes | None:
     provider, model = providers.split_id(model_id)
+    # After the caller's description, so the subject leads and the house style
+    # reads as a refinement of it rather than competing with it.
+    prompt = "\n\n".join(p for p in (prompt, house, UNIVERSAL) if p)
     if provider == "gemini":
         return _gemini(model, prompt, ratio)
     if provider in providers.OPENAI_COMPATIBLE:

@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "native-by-k"
+version = "1.0.0"
+description = "An agent you run yourself — reads your documents, runs code in a sealed container, writes the files you hand over."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+dynamic = ["dependencies"]
+
+[project.urls]
+Homepage = "https://github.com/Karunya-Muddana/Native"
+Source = "https://github.com/Karunya-Muddana/Native"
+Issues = "https://github.com/Karunya-Muddana/Native/issues"
+
+[project.scripts]
+native = "cli:main"
+
+[tool.setuptools]
+py-modules = ["cli", "api", "main"]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+namespaces = true
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }

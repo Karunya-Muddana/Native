@@ -12,6 +12,25 @@ it is a surprise waiting for you.
 - **`delegate_to_coding_model` has never completed a delegation successfully.** Its one substantive test predates the tools-capable model swap and produced a fabricated tool call. It has not been re-tested since the provider rewrite either.
 - **Capabilities are inferred for three providers.** Ollama and OpenRouter publish them; Groq, Gemini and NVIDIA do not, so eligibility there is guessed from the model id. The panel labels those as inferred, and a wrong guess costs one failed call before failover absorbs it.
 
+**The live browser**
+
+- **It needs Steel running, and Steel is a separate process you start.** Without it `browser_do` and `browser_page` fail at call time. `web_search` and `browse_web` do not fail — they fall back to plain HTTP — so losing Steel costs rendering rather than the internet, but it costs it silently: the result looks the same, it is just thinner.
+- **Steel's own `npm run dev` does not work on Windows.** The UI workspace runs `vite --host ${HOST:-0.0.0.0}`, which `cmd.exe` passes through literally, so vite exits 1 and `concurrently` takes the API down with it. Use `npm run dev -w api`. The UI is the session viewer and is redundant here anyway, since the real window is on screen.
+- **A Steel container will shadow the native one.** Steel's published Docker image binds `0.0.0.0:3000`, and Docker Desktop restarts it on launch, so a container left over from an earlier experiment silently takes the port from the local install. The container cannot do headful — a Linux container on a Windows host has no display — so sessions created with `headless: false` fail to launch Chrome, with a dbus error that says nothing about the real cause. `docker ps` shows it; `docker stop <name>` frees the port.
+- **Google usually declines.** `web_search` tries Google first and falls through to DuckDuckGo, and in testing it fell through every time — a consent screen or a robot check, visible in the Chrome window. The cascade works, so search works; it is just rarely Google.
+- **Search results include sitelinks as separate hits.** The index keys on `a h3`, which catches a result's own sub-links — `/issues`, `/pulls` — and reports them as if they were distinct sources. Real URLs, low value, and they eat result slots.
+- **Steel spoofs the fingerprint.** A run from Windows Chrome reported `X11; Linux x86_64` and `Sec-Ch-Ua-Platform: "Linux"` to the server. That is Steel's anti-detection working as designed, and it is also a mismatch some sites check for.
+- **Every fetch is now seconds rather than milliseconds.** A rendered page load is 2–5s against roughly 0.3s over plain HTTP. Research mode reads 12–25 sources per run and pays that on each one.
+- **The profile persists and is not isolated.** `persist: true` and a `user-data-dir` on disk mean logins survive restarts, which is the point — and also means anything signed into stays signed in until that directory is cleared.
+- **No per-domain allowlist, and the browser can act.** The read-only web tools could only fetch; this one clicks, types and submits. Nothing in code constrains where. The prompt tells it to stop rather than invent credentials and to stop at a CAPTCHA, and a prompt is not an enforcement mechanism. The window is visible so you can watch it, which is a mitigation and not a control.
+
+**Context**
+
+- **The session record is lossy, and its quality is a model's judgement.** Tier 2 folds evicted messages through the `base` role with a prompt telling it what to keep. What it decides to drop is gone for that session — the messages themselves are already outside the window.
+- **A failed fold is silent to the user.** It logs and keeps the previous digest, so the session quietly runs on a record that is missing its most recent stretch.
+- **`MIN_FOLD` means the newest evicted messages are briefly in neither tier.** Between falling out of the working set and accumulating enough to trigger a fold, up to five messages are visible only to long-term recall.
+- **Research mode's notebook protocol is not enforced.** `RESEARCH_PROMPT` instructs `note_source` after every source read. In an observed run of roughly fifteen tool calls it was never called once — the model judged a lead-generation request not to be research and skipped it. Nothing in the graph checks.
+
 **Efficiency**
 
 - **`search_documents` truncates excerpts at 500 characters**, which is too aggressive for tables. In the validation run it cost three round trips: each search returned a table fragment, forcing a follow-up read.

@@ -7,11 +7,14 @@ api.py  ──  AgentRuntime (app/runtime/runtime.py)
               └─ LangGraph StateGraph, checkpointed to SQLite per session:
 
                    START → call_model ─┬─(tool_calls)→ tools (ToolNode) → call_model
+                                       ├─(stalled)→ nudge → call_model
                                        └─(none)→ END
 
-                 One turn ends when the model stops asking for tools. The
-                 conversation itself lives in the checkpointer, keyed by
-                 session_id, so a turn is stateless and a reload is not.
+                 One turn ends when the model stops asking for tools — unless
+                 it stopped without finishing, which is what the nudge branch
+                 is for. The conversation itself lives in the checkpointer,
+                 keyed by session_id, so a turn is stateless and a reload is
+                 not.
 
                  delegate_to_coding_model runs a second, self-contained graph
                  (app/tools/sub_agents/coder.py) with its own four-tool subset:
@@ -53,8 +56,11 @@ an everyday orchestrator — which is why the chain exists.
 - **`app/runtime/runtime.py`** — graph nodes, the `AgentRuntime` class, context-window management, and per-call logging. One `.run()`/`.stream()` call is one turn; conversation state lives in a LangGraph SQLite checkpointer keyed by `session_id`.
 - **`app/runtime/sessions.py`** — `SessionStore`: session metadata (id, title, timestamps, turn count) in the same on-disk SQLite file. Titles a session from its first message.
 - **`app/config/prompts.py`** — `SYSTEM_PROMPT`, the full tool-use operating rules. Prepended at call time, never stored in state.
-- **`api.py`** — FastAPI service: `/sessions` CRUD, `/chat` (blocking) and `/chat/stream` (SSE, one event per model/tool step), `/health`, and `/` which serves the web UI. Run with `uvicorn api:app`.
-- **`cli.py`** — interactive REPL over one persistent session. **`main.py`** — single-shot run of the validation task.
+- **`api.py`** — FastAPI service: `/sessions` CRUD, `/chat` (blocking) and `/chat/stream` (SSE, one event per model/tool step), `/health`, and `/` which serves the web UI. Started by `native start`, which is `uvicorn api:app` with the browser opened for you.
+- **`steel.py`** — the live browser's plumbing: the Steel session, the one thread that owns Playwright (its sync API is thread-affine and tool calls arrive on a pool), and the JavaScript that numbers a page's interactive elements. **`livebrowser.py`** — the two tools built on it.
+- **`install.py`** — one-command setup. Seven steps in dependency order, each checking before it acts so a re-run repairs what is missing and leaves the rest alone. Only the first four are required; a failure in Ollama, Docker or Steel is reported and stepped over, because a partial install that says exactly what it got beats one that dies at Docker and leaves you guessing whether the Python side worked. It is Python rather than a shell script because Python is the one thing already guaranteed present, and three drifting shell scripts is the alternative. It also writes Steel's launcher, which is where the `npm run dev -w api` workaround is encoded rather than left in a README for someone to miss.
+
+- **`cli.py`** — the `native` command, installed as a console entry point by `pyproject.toml`: `start` runs the service, `chat` is an interactive REPL over one persistent session. **`main.py`** — single-shot run of the validation task.
 - **`frontend/index.html`** — the web UI (below). Single self-contained file, served same-origin by `api.py`.
 - **`app/models/base.py`** — orchestrator model with all registered tools bound.
 - **`app/models/base.py`** — orchestrator model with all registered tools bound.
@@ -66,16 +72,34 @@ an everyday orchestrator — which is why the chain exists.
 - **`app/tools/registery.py`** — tool name → tool object registry.
 - **`app/tools/sandbox/python/python_runner.py`** — Docker-sandboxed execution. Client created lazily so importing the registry doesn't require a running daemon.
 - **`app/tools/sandbox/python/Dockerfile`** — the `mrpl-sandbox-python` image.
-- **`app/tools/browser.py`** — `web_search` and `browse_web`, the stateless web tools. Plain `requests` plus a regex HTML-to-text pass: no browser, no container, no JavaScript. A page that renders itself client-side is simply out of scope, which is the price of not shipping a Chrome instance.
+- **`app/tools/browser.py`** — `web_search` and `browse_web`. Each now tries the live browser first (`liveweb.py`) and keeps its original implementation — plain `requests` plus a regex HTML-to-text pass — as the fallback for when Steel is not running. The two tools kept their names and signatures deliberately: the model's routing, the system prompt and research mode all upgrade without knowing anything changed. The cost of the fallback path is unchanged and so is its limitation, that a client-side page comes back thin.
 - **`app/tools/authoring/`** — the three file generators. `blocks.py` holds the block spec they share and its parser, which accepts either JSON text or an already-decoded list because local models are inconsistent about which they send, and which pads ragged table rows rather than failing a whole document over a missing trailing cell. `document.py`, `spreadsheet.py` and `presentation.py` each render, save, then **reopen the saved file and report its real contents** — paragraph and table counts, per-column value ranges, slide titles. The agent's own account of a file it generated is a description of intent; this is a description of the artifact.
 - **`app/tools/readback.py`** — the same idea for files the agent did not author through those tools. `snapshot`/`changed_since` diff `/sandbox/output/` around a `python_runner` call, and `describe` opens whatever appeared — xlsx, docx, pptx, pdf, image, text — so a script that wrote a different spreadsheet than the agent believes it wrote is caught in the tool result rather than in the user's inbox.
 - **`app/tools/desktop.py`** — `open_on_screen`. `webbrowser.open` for URLs, `os.startfile` / `open` / `xdg-open` for files. All four hand the target to the OS's file-association machinery rather than to a shell, so a filename can never be read as a command; only `http`/`https` URLs are accepted, since any other scheme is a way to make some other application run.
 - **`app/tools/workspace.py`** — `clear_workspace`. Empties every table in `agent.db` rather than a named list of them: the transcripts live in LangGraph's checkpointer tables, whose names and number are its business and have changed across versions, and anything in that file is chat history by definition. Also drops the persistent `history` Chroma collection, the in-process knowledge base index (`rag.indexed = False`, so it rebuilds on the next search), and the runtime's live per-session `context_manager` objects — imported lazily inside the function, because the runtime imports the registry which imports this module.
 - **`app/tools/ocr.py`**, **`io.py`**, **`pdf_info.py`**, **`excel_info.py`**, **`sandbox_files.py`**, **`rag.py`**, **`math.py`** — the remaining tools.
-- **`app/config/context_manager.py`** — conversation memory in a persistent Chroma collection. Tool results are excluded from the embedding store: they're large, task-local, and re-fetchable, and surfacing a stale one as current fact is a direct hallucination vector.
+- **Context is three tiers.** Assembled in `call_model` on every turn, in the order the model should trust them:
+
+  | Tier | What | Where | Scope |
+  |---|---|---|---|
+  | 1 · working set | the last N messages verbatim, tool calls still paired with their results | the checkpointer | 30 messages (60 in research mode) |
+  | 2 · session record | everything in this session that has scrolled out of tier 1, folded into a running summary | `digest` table in `agent.db` | this session |
+  | 3 · long-term | turns embedded and recalled by similarity | Chroma `history` collection | every session on the machine |
+
+  Tier 2 is what closes the gap between the other two. Tier 3 is queried by similarity against the latest message, so it surfaces what *resembles* the current question and knows nothing about what merely happened recently — the twelfth source of a research run comes back only by luck. Without tier 2, a long run repeats searches it has already done and writes its final answer from the last few pages plus a vague memory of the rest.
+
+- **`app/runtime/digest.py`** — tier 2. Folding is incremental: only messages that have newly left the working set are summarised, and they are folded into the existing summary rather than re-read from the top, so a two-hundred-step run costs the same per fold as a ten-step one. `MIN_FOLD` holds the fold back until enough has accumulated, because summarising one message at a time is both a model call per step and a summary of a summary. The summariser is invoked with no tools bound — it records what happened, it does not act — and a failed fold keeps the previous digest rather than raising, because a turn that dies building its own context is worse than one with a slightly stale record.
+
+- **`app/tools/steel.py`** — the live browser's plumbing. **`app/tools/livebrowser.py`** — `browser_do` and `browser_page`. **`app/tools/liveweb.py`** — the rendered implementations of `web_search` and `browse_web`: `browser.py` calls these first and falls back to its own plain-HTTP path when they return `None`, which they do for exactly one reason, the live browser being unavailable. A page that genuinely failed returns its error instead, because silently refetching it over HTTP would hide the reason and hand back a thinner copy of the same failure. Reads happen in a scratch tab, so looking something up never navigates the tab a half-filled form is sitting in.
+
+- **`app/config/context_manager.py`** — tier 3: conversation memory in a persistent Chroma collection. Tool results are excluded from the embedding store: they're large, task-local, and re-fetchable, and surfacing a stale one as current fact is a direct hallucination vector.
 - **`app/config/settings.py`** — `RAG_MODEL`, `CODER_MODEL`, `CODER_MAX_STEPS`, `TOOL_MAX_RETRIES`.
 
 ## Context management
+
+**Stalling.** A turn used to end on any reply without a tool call, which is right when the model has answered and wrong when it has only *described* the call it was about to make — `ACT: I will now browse the repository` with no `browse_web` attached. The graph could not tell those apart, so a narrated action ended the run and the user watched the agent stop mid-plan. An empty reply was the same failure with nothing left over. The CHECK/PLAN/ACT prompt makes this likelier rather than less: the model writes ACT as prose and treats having written it as having acted.
+
+So `tool_call_check` now asks a second question. A reply with no tool call that ends on an unfulfilled intent — or has no text at all — routes to `nudge`, which appends a short instruction saying the step was described but not taken, and sends it back to `call_model`. `MAX_STALLS` bounds it at three per turn and a real tool call resets the counter, so a stalling model is pushed back a few times but can never spin there. Two details that are not optional: the branch scans backwards for the last **AI** message rather than reading `messages[-1]`, because the nudge itself is the tail by then; and the turn's answer comes from `final_answer()` for the same reason, or a run that exhausted its nudges would hand the user the nudge text as its reply. The nudge is filtered out of the run trace in both the blocking and streaming paths — it is plumbing, not a step.
 
 `call_model` keeps a contiguous window of recent messages rather than assembling a synthetic one. This matters more than it sounds: an `AIMessage` carrying `tool_calls` must stay adjacent to the `ToolMessage` answering it, or the history becomes structurally invalid and models respond to the malformed context with confident fabrication. The window also pins the system prompt separately, so the operating rules don't fall out of context exactly when a conversation gets long enough to need them.
 
@@ -91,9 +115,9 @@ Every model call logs the exact context it received — message count, type brea
 
 Three ways in, all on the same `AgentRuntime` and the same on-disk SQLite state:
 
+- **`native`** (or `native start`) — the HTTP service and the web UI, opened in a browser at `http://127.0.0.1:8000/`. `--host`, `--port`, `--no-browser` and `--reload` adjust it.
+- **`native chat`** — interactive REPL, one persistent session, no web UI.
 - **`python main.py`** — runs the validation task once and prints the answer.
-- **`python cli.py`** — interactive REPL, one persistent session.
-- **`uvicorn api:app --host 127.0.0.1 --port 8000`** — the HTTP service and the web UI. Open `http://127.0.0.1:8000/`.
 
 The web UI is a single static file (`frontend/index.html`) served same-origin by the API, so streaming needs no CORS and no build step. It shows the run sidebar, the live tool trace (each call with its arguments, result, status, and client-measured duration), and the final answer. Nothing in it talks to anything but the local API.
 

@@ -92,6 +92,20 @@ def clear_workspace(scope: str = "all", confirm: bool = False) -> str:
     return "\n".join(out)
 
 
+# ── the same erase, without the model in the middle ────────────────────────
+def clear_history() -> dict:
+    """Erase every stored conversation and both vector indexes.
+
+    The tool above exists for when the *agent* is asked to clear things, and so
+    it is deliberately two-step. This is the direct path behind the button in
+    the UI, where the user has already confirmed in front of the thing being
+    deleted. Sandbox files are untouched — this is history only.
+    """
+    sessions, memories = _clear_chats()
+    rag_chunks = _clear_rag_index()
+    return {"sessions": sessions, "memories": memories, "chunks": rag_chunks}
+
+
 # ── surveying ──────────────────────────────────────────────────────────────
 def _survey(part: str) -> str:
     if part in ("input", "output"):
@@ -192,20 +206,26 @@ def _drop_live_sessions() -> None:
     runtime_module._memories.clear()
 
 
-def _clear_indexes() -> str:
-    memories = _clear_history_collection()
+def _clear_rag_index() -> int:
+    """Empty the knowledge base index.
 
-    # The knowledge base index is an in-process collection built on first
-    # search. Emptying it and clearing the flag makes the next search rebuild
-    # from whatever is in knowledge_base/ now.
+    It is an in-process collection built on first search. Emptying it and
+    clearing the flag makes the next search rebuild from whatever is in
+    knowledge_base/ now; the documents themselves are never touched.
+    """
     from app.tools import rag
 
     ids = rag.collection.get()["ids"]
     if ids:
         rag.collection.delete(ids=ids)
     rag.indexed = False
+    return len(ids)
 
+
+def _clear_indexes() -> str:
+    memories = _clear_history_collection()
+    chunks = _clear_rag_index()
     return (
-        f"{memories} remembered turn(s) and {len(ids)} document chunk(s) dropped; "
+        f"{memories} remembered turn(s) and {chunks} document chunk(s) dropped; "
         "the knowledge base reindexes on the next search"
     )
